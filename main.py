@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import requests
+import json
 
 RESERVATION_TIMES = [
   {
@@ -96,19 +97,19 @@ ROOMS = [ # first index is highest priority, as it goes down the list, the less 
       'eid': 18510,
       'tech': True,
       'name': 'LB 451 - Brazil',
-      'priority': 5
+      'priority': 4
     },
     {
       'eid': 18512,
       'tech': True,
       'name': 'LB 453 - Japan',
-      'priority': 5
+      'priority': 4
     },
     {
       'eid': 18523,
       'tech': True,
       'name': 'LB 459 - Italy',
-      'priority': 5
+      'priority': 4
     },
   ],
   [
@@ -116,31 +117,31 @@ ROOMS = [ # first index is highest priority, as it goes down the list, the less 
       'eid': 18524,
       'tech': True,
       'name': 'LB 518 - Ukraine',
-      'priority': 6
+      'priority': 5
     },
     {
       'eid': 18525,
       'tech': True,
       'name': 'LB 520 - South Africa',
-      'priority': 6
+      'priority': 5
     },
     {
       'eid': 18526,
       'tech': True,
       'name': 'LB 522 - Peru',
-      'priority': 6
+      'priority': 5
     },
     {
       'eid': 18511,
       'tech': True,
       'name': 'LB 547 - Lithuania',
-      'priority': 6
+      'priority': 5
     },
     {
       'eid': 18528,
       'tech': True,
       'name': 'LB 583 - Poland',
-      'priority': 6
+      'priority': 5
     },
   ]
 ]
@@ -162,7 +163,7 @@ def reservationDaysInTwoWeeksFromNow(day = RESERVATION_TIMES[0]):
   now = datetime.now()
   dates = []
   diff = day['iso_weekday'] - now.isoweekday() # Find difference between today and the day we are trying to reserve (Number from -6 to 6)
-  if diff == 0: 
+  if diff == 0: # A day we want to reserve is also today, so add this to array
     dates.append(now) 
     dates.append(now + timedelta(days=7))
     dates.append(now + timedelta(days=14))
@@ -187,6 +188,9 @@ def createDateStringsForRequest(date: datetime):
   return startDate, endDate
 
 def getAvailabilityArray(startStr: str, endStr: str):
+  '''
+  Queries the availablilty grid in libcal between the time strings created in createDateStringsForRequest and returns the whole response
+  '''
   formData = {
     'lid': LID,
     'pageSize': 18,
@@ -197,6 +201,29 @@ def getAvailabilityArray(startStr: str, endStr: str):
   res = requests.post(url, headers=HEADERS, data=formData)
   return res.json()
  
+def getRoomAvailabilityArray(availabilityArray: dict, room = ROOMS[0][0]):
+  '''
+  Filters out the array to only contain the specified room information
+  '''
+  return list(filter(lambda array: array['itemId'] == room['eid'], availabilityArray))
+
+def isRoomAvailableInTime(roomArray: list[dict], startTimeStr: str, endTimeStr: str):
+  '''
+  Checks if the room is available between the times specified in startTimeStr and endTimeStr
+  If it is available, returns an array of the room slot dictionaries that was given by room aray but only the ones that are between the times
+  Else, it returns False
+  '''
+  # turn time strings into time objects
+  # the *map thing is pretty weird, it can process times much faster than datetime can on its own. idk why lol
+  startTime = time(*map(int, startTimeStr.split(':')))
+  endTime = time(*map(int, endTimeStr.split(':')))
+  # room times are formatted like 'YYYY-MM-DD hh:mm:ss', take second half and do the same thing as above
+  roomStartTime = time(*map(int, roomArray[0]['start'].split(' ')[1].split(':')))
+  print(startTime)
+  print(endTime)
+  print(roomStartTime)
+  
+
 def main(): 
   for day in RESERVATION_TIMES:
     print(f"Looking to reserve a room for the following {day['dow']}s")
@@ -210,7 +237,12 @@ def main():
   reservationDates = reservationDaysInTwoWeeksFromNow()
   start, end = createDateStringsForRequest(reservationDates[0])
   print("\n\n")
-  print(getAvailabilityArray(start, end)['slots'][:30])
+  grid = getAvailabilityArray(start, end)
+  print(grid['slots'][:30])
+  print("\n\n")
+  print(json.dumps(getRoomAvailabilityArray(grid['slots']), indent=2))
+  print("\n\n")
+  isRoomAvailableInTime(getRoomAvailabilityArray(grid['slots']), RESERVATION_TIMES[0]['startTime'], RESERVATION_TIMES[0]['endTime'])
   
 if __name__ == "__main__":
   main()
