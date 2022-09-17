@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, time
+from bs4 import BeautifulSoup
 import requests
 import json
 
@@ -177,29 +178,32 @@ def reservationDaysInTwoWeeksFromNow(day = RESERVATION_TIMES[0]):
           
 def createDateStringsForRequest(date: datetime):
   """ 
-  Gets the start and end dates that are needed for the request to the library reservation server
+  Gets the start date that is needed for the request to the library reservation server
   
-  Returns: A tuple with 2 elements, a start date and an end date, both are formatted as YYYY-MM-DD
+  Returns: a start date formatted as YYYY-MM-DD
   """
   # since the request wants a start date and an end date which is the day after, we need to format the date to be 2 strings
-  nextDay = date + timedelta(days=1) 
+  # nextDay = date + timedelta(days=1) 
   startDate = date.strftime("%Y-%m-%d")
-  endDate = nextDay.strftime("%Y-%m-%d")
-  return startDate, endDate
+  # endDate = nextDay.strftime("%Y-%m-%d")
+  return startDate #, endDate
 
-def getAvailabilityArray(startStr: str, endStr: str):
+def getAvailabilityArray(startStr: str):
   '''
-  Queries the availablilty grid in libcal between the time strings created in createDateStringsForRequest and returns the whole response
+  Queries the availablilty grid in libcal with the time string created in createDateStringsForRequest and returns a list of all the availablilities for that day
   '''
-  formData = {
-    'lid': LID,
-    'pageSize': 18,
-    'start': startStr,
-    'end': endStr
-  }
-  url = "https://concordiauniversity.libcal.com/spaces/availability/grid"
-  res = requests.post(url, headers=HEADERS, data=formData)
-  return res.json()
+  url = f"https://concordiauniversity.libcal.com/r/accessible/availability?lid={LID}&date={startStr}"
+  soup = BeautifulSoup(requests.get(url).text, features="html.parser")                       # use the information contained in the html, the checkboxes on the accessibility website 
+  divs = soup.find_all('div', {'class': 'panel panel-default'}) # have hidden properties that we can take advantage of
+  inputs = [div.find_all('input') for div in divs] # using array generator notation to compile all the input tags that contain the availability information
+  inputs = [inputTag for sublist in inputs for inputTag in sublist] #flatten array
+  return [
+    {
+      "start": input['data-start'],
+      "end": input['data-end'],
+      "itemId": int(input['data-eid']),
+      "checksum": input['data-crc']
+    } for input in inputs]
  
 def getRoomAvailabilityArray(availabilityArray: dict, room = ROOMS[0][0]):
   '''
@@ -230,19 +234,19 @@ def main():
     reservationDates = reservationDaysInTwoWeeksFromNow(day)
     for date in reservationDates:
       print(datetime.ctime(date))
-      start, end = createDateStringsForRequest(date)
-      res = getAvailabilityArray(start, end)
-      print(res['slots'][:10])
+      start = createDateStringsForRequest(date)
+      res = getAvailabilityArray(start)
+      print(res[:10])
       
   reservationDates = reservationDaysInTwoWeeksFromNow()
-  start, end = createDateStringsForRequest(reservationDates[0])
+  start = createDateStringsForRequest(reservationDates[0])
   print("\n\n")
-  grid = getAvailabilityArray(start, end)
-  print(grid['slots'][:30])
+  availabilities = getAvailabilityArray(start)
+  print(availabilities[:30])
   print("\n\n")
-  print(json.dumps(getRoomAvailabilityArray(grid['slots']), indent=2))
+  print(json.dumps(getRoomAvailabilityArray(availabilities), indent=2))
   print("\n\n")
-  isRoomAvailableInTime(getRoomAvailabilityArray(grid['slots']), RESERVATION_TIMES[0]['startTime'], RESERVATION_TIMES[0]['endTime'])
+  isRoomAvailableInTime(getRoomAvailabilityArray(availabilities), RESERVATION_TIMES[0]['startTime'], RESERVATION_TIMES[0]['endTime'])
   
 if __name__ == "__main__":
   main()
