@@ -221,11 +221,19 @@ def isRoomAvailableInTime(roomArray: list[dict], startTimeStr: str, endTimeStr: 
   # the *map thing is pretty weird, it can process times much faster than datetime can on its own. idk why lol
   startTime = time(*map(int, startTimeStr.split(':')))
   endTime = time(*map(int, endTimeStr.split(':')))
-  # room times are formatted like 'YYYY-MM-DD hh:mm:ss', take second half and do the same thing as above
-  roomStartTime = time(*map(int, roomArray[0]['start'].split(' ')[1].split(':')))
   print(startTime)
   print(endTime)
-  print(roomStartTime)
+  slotsInTime = []
+  print('\n\n')
+  for slot in roomArray:
+    # room times are formatted like 'YYYY-MM-DD hh:mm:ss', take second half and do the same thing as above
+    roomStartTime = time(*map(int, slot['start'].split(' ')[1].split(':')))
+    print(roomStartTime)
+    if roomStartTime >= startTime and roomStartTime <= endTime:
+      print(f"{startTime} > {roomStartTime} > {endTime}")
+    
+
+
   
 
 def main(): 
@@ -239,14 +247,14 @@ def main():
       print(res[:10])
       
   reservationDates = reservationDaysInTwoWeeksFromNow()
-  start = createDateStringsForRequest(reservationDates[0])
+  start = createDateStringsForRequest(reservationDates[1])
   print("\n\n")
   availabilities = getAvailabilityArray(start)
   print(availabilities[:30])
   print("\n\n")
   print(json.dumps(getRoomAvailabilityArray(availabilities), indent=2))
   print("\n\n")
-  isRoomAvailableInTime(getRoomAvailabilityArray(availabilities), RESERVATION_TIMES[0]['startTime'], RESERVATION_TIMES[0]['endTime'])
+  isRoomAvailableInTime(getRoomAvailabilityArray(availabilities), RESERVATION_TIMES[1]['startTime'], RESERVATION_TIMES[1]['endTime'])
   
 if __name__ == "__main__":
   main()
