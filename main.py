@@ -8,19 +8,22 @@ RESERVATION_TIMES = [
     'dow': 'Monday',
     'iso_weekday': 1,
     'startTime': '13:00:00',
-    'endTime': '16:00:00'
+    'endTime': '16:00:00',
+    '30minSlots': 6
   },
   {
     'dow': 'Friday',
     'iso_weekday': 5,
     'startTime': '14:30:00',
-    'endTime': '16:00:00'
+    'endTime': '16:00:00',
+    '30minSlots': 4
   },
   {
     'dow': 'Thursday',
     'iso_weekday': 4,
     'startTime': '15:00:00',
-    'endTime': '16:00:00'
+    'endTime': '16:00:00',
+    '30minSlots': 2
   }
 ]
 
@@ -151,7 +154,8 @@ LID = 2161 # library id
 
 HEADERS = {
   'User-Agent': 'Mozilla/5.0',
-  'Referer': 'https://concordiauniversity.libcal.com/reserve/webster'
+  'Referer': 'https://concordiauniversity.libcal.com/reserve/webster',
+  'Content-Type': 'application/json'
 }
 
 def reservationDaysInTwoWeeksFromNow(day = RESERVATION_TIMES[0]):
@@ -201,6 +205,8 @@ def getAvailabilityArray(startStr: str):
     {
       "start": input['data-start'],
       "end": input['data-end'],
+      "seat_id": input['data-seat'],
+      "lid": LID,
       "itemId": int(input['data-eid']),
       "checksum": input['data-crc']
     } for input in inputs]
@@ -209,34 +215,53 @@ def getRoomAvailabilityArray(availabilityArray: dict, room = ROOMS[0][0]):
   '''
   Filters out the array to only contain the specified room information
   '''
-  return list(filter(lambda array: array['itemId'] == room['eid'], availabilityArray))
+  return list(filter(lambda array: int(array['itemId']) == room['eid'], availabilityArray))
 
-def isRoomAvailableInTime(roomArray: list[dict], startTimeStr: str, endTimeStr: str):
+def isRoomAvailableInTime(roomArray: list[dict], reservationTime = RESERVATION_TIMES[0], room = ROOMS[0][0]):
   '''
-  Checks if the room is available between the times specified in startTimeStr and endTimeStr
+  Checks if the room is available between the times specified in the reservation time
   If it is available, returns an array of the room slot dictionaries that was given by room aray but only the ones that are between the times
   Else, it returns False
   '''
   # turn time strings into time objects
   # the *map thing is pretty weird, it can process times much faster than datetime can on its own. idk why lol
-  startTime = time(*map(int, startTimeStr.split(':')))
-  endTime = time(*map(int, endTimeStr.split(':')))
-  print(startTime)
-  print(endTime)
+  startTime = time(*map(int, reservationTime['startTime'].split(':')))
+  endTime = time(*map(int, reservationTime['endTime'].split(':')))
   slotsInTime = []
-  print('\n\n')
+  consecutiveSlots = reservationTime['30minSlots']
+  
   for slot in roomArray:
     # room times are formatted like 'YYYY-MM-DD hh:mm:ss', take second half and do the same thing as above
     roomStartTime = time(*map(int, slot['start'].split(' ')[1].split(':')))
-    print(roomStartTime)
-    if roomStartTime >= startTime and roomStartTime <= endTime:
-      print(f"{startTime} > {roomStartTime} > {endTime}")
     
+    if consecutiveSlots == 0: # we have a room that is available for every time slot that we wanted
+      break
+    
+    if roomStartTime >= startTime and roomStartTime <= endTime: # append all the slots within the time to an array to make creating the reservations easier
+      consecutiveSlots -= 1
+      slotsInTime.append(slot)
+      print(f"\t\t{startTime} > {roomStartTime} > {endTime}")
+    else: # reset the counter if we miss a slot, so we definitely dont send a partial reservation
+      consecutiveSlots = reservationTime['30minSlots']
+  if consecutiveSlots == 0: 
+    return slotsInTime
+  else:
+    return False
+
+def createFormForRequest(slots: list):
+  return {
+    "libAuth": "true",
+    "blowAwayCart": "true",
+    "returnUrl": f"/r/accessible?lid={LID}&gid=5032&zone=0&space=0&capacity=2&accessible=0&powered=0",
+    "bookings": slots,
+    "method": 14
+  }
 
 
   
 
 def main(): 
+  reservations = []
   for day in RESERVATION_TIMES:
     print(f"Looking to reserve a room for the following {day['dow']}s")
     reservationDates = reservationDaysInTwoWeeksFromNow(day)
@@ -244,17 +269,35 @@ def main():
       print(datetime.ctime(date))
       start = createDateStringsForRequest(date)
       res = getAvailabilityArray(start)
-      print(res[:10])
+      reservationMade = False
+      if reservationMade:
+        break
+      for priority in ROOMS:
+        if reservationMade: 
+          break
+        print(f"Priority: {priority[0]['priority']}")
+        for room in priority:
+          print(f"\tRoom: {room['name']}")
+          roomTimes = getRoomAvailabilityArray(res, room)
+          slots = isRoomAvailableInTime(roomTimes, day, room)
+          if slots != False:
+            print(f"## We have a room!! {room['name']} is available between {day['startTime']} and {day['endTime']} on {datetime.ctime(date)}")
+            reservations.append(slots)
+            reservationMade = True
+            break
+      if not reservationMade:
+        print(f"No possible slots found for {datetime.ctime(date)}")
+  print(json.dumps(reservations, indent=2))
+  
+  session = requests.Session()
+  url = 'https://concordiauniversity.libcal.com/ajax/space/createcart'
+  data = createFormForRequest(reservations[0])
+  res = session.post(url, data=data, headers=HEADERS, allow_redirects=True)
+  print(data)
+  print(res)
+  print(res.text)
+  
       
-  reservationDates = reservationDaysInTwoWeeksFromNow()
-  start = createDateStringsForRequest(reservationDates[1])
-  print("\n\n")
-  availabilities = getAvailabilityArray(start)
-  print(availabilities[:30])
-  print("\n\n")
-  print(json.dumps(getRoomAvailabilityArray(availabilities), indent=2))
-  print("\n\n")
-  isRoomAvailableInTime(getRoomAvailabilityArray(availabilities), RESERVATION_TIMES[1]['startTime'], RESERVATION_TIMES[1]['endTime'])
   
 if __name__ == "__main__":
   main()
