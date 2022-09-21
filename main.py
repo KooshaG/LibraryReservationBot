@@ -155,7 +155,6 @@ LID = 2161 # library id
 HEADERS = {
   'User-Agent': 'Mozilla/5.0',
   'Referer': 'https://concordiauniversity.libcal.com/reserve/webster',
-  'Content-Type': 'application/json'
 }
 
 def reservationDaysInTwoWeeksFromNow(day = RESERVATION_TIMES[0]):
@@ -207,7 +206,7 @@ def getAvailabilityArray(startStr: str):
       "end": input['data-end'],
       "seat_id": input['data-seat'],
       "lid": LID,
-      "itemId": int(input['data-eid']),
+      "eid": int(input['data-eid']),
       "checksum": input['data-crc']
     } for input in inputs]
  
@@ -215,7 +214,7 @@ def getRoomAvailabilityArray(availabilityArray: dict, room = ROOMS[0][0]):
   '''
   Filters out the array to only contain the specified room information
   '''
-  return list(filter(lambda array: int(array['itemId']) == room['eid'], availabilityArray))
+  return list(filter(lambda array: int(array['eid']) == room['eid'], availabilityArray))
 
 def isRoomAvailableInTime(roomArray: list[dict], reservationTime = RESERVATION_TIMES[0], room = ROOMS[0][0]):
   '''
@@ -249,13 +248,19 @@ def isRoomAvailableInTime(roomArray: list[dict], reservationTime = RESERVATION_T
     return False
 
 def createFormForRequest(slots: list):
-  return {
+  # create the stuff that doesn't change in the form and then add the extra stuff
+  form = {
     "libAuth": "true",
     "blowAwayCart": "true",
+    "method": 14,
     "returnUrl": f"/r/accessible?lid={LID}&gid=5032&zone=0&space=0&capacity=2&accessible=0&powered=0",
-    "bookings": slots,
-    "method": 14
   }
+  # transform the information in the slots to the gross data layout that libcal wants
+  for index, slot in enumerate(slots):
+      for key in slot:
+        form[f'bookings[{index}][{key}]'] = slot[key]
+  
+  return form
 
 
   
@@ -287,15 +292,14 @@ def main():
             break
       if not reservationMade:
         print(f"No possible slots found for {datetime.ctime(date)}")
-  print(json.dumps(reservations, indent=2))
   
   session = requests.Session()
   url = 'https://concordiauniversity.libcal.com/ajax/space/createcart'
   data = createFormForRequest(reservations[0])
-  res = session.post(url, data=data, headers=HEADERS, allow_redirects=True)
-  print(data)
-  print(res)
+  res = session.post(url, data=data, headers=HEADERS, allow_redirects=True) #
   print(res.text)
+  print(json.dumps(session.cookies.get_dict(), indent=2))
+  
   
       
   
