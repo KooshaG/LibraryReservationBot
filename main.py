@@ -3,6 +3,9 @@ from bs4 import BeautifulSoup
 import requests
 import json
 
+CONCORDIA_USERNAME = ""
+CONCORDIA_PASSWORD = ""
+
 RESERVATION_TIMES = [
   {
     'dow': 'Monday',
@@ -158,7 +161,7 @@ HEADERS = {
 }
 
 CONCORDIA_LIBCAL_URL = 'https://concordiauniversity.libcal.com'
-CONCORDIA_AUTH_URL = ''
+CONCORDIA_AUTH_URL = 'https://fas.concordia.ca'
 
 def reservationDaysInTwoWeeksFromNow(day = RESERVATION_TIMES[0]):
   '''
@@ -301,38 +304,51 @@ def main():
   url = f'{CONCORDIA_LIBCAL_URL}/ajax/space/createcart'
   data = createFormForRequest(reservations[0])
   res = session.post(url, data=data, headers=HEADERS, allow_redirects=True) #
-  print(res.json())
-  print(json.dumps(session.cookies.get_dict(), indent=2))
+  # print(res.json())
+  # print(json.dumps(session.cookies.get_dict(), indent=2))
   
   url2 = f"{CONCORDIA_LIBCAL_URL}{res.json()['redirect']}"
   res2 = session.get(url2, headers=HEADERS, allow_redirects=True)
-  print(res2.text)
-  print(json.dumps(session.cookies.get_dict(), indent=2))
+  # print(res2.text)
+  # print(json.dumps(session.cookies.get_dict(), indent=2))
   
   soup = BeautifulSoup(res2.text, features="html.parser")
   params = {input['name']: input['value'] for input in soup.find_all('input')}
   url3 = soup.form['action']
   res3 = session.get(url3, params=params, headers=HEADERS, allow_redirects=True)
-  print(res3.text)
-  print(json.dumps(session.cookies.get_dict(), indent=2))
+  # print(res3.text)
+  # print(json.dumps(session.cookies.get_dict(), indent=2))
   
   soup = BeautifulSoup(res3.text, features="html.parser")
   data = {
-    'UserName': '',
-    'Password': '',
+    'UserName': CONCORDIA_USERNAME,
+    'Password': CONCORDIA_PASSWORD,
     'AuthMethod': 'FormsAuthentication'
     }
   url4 = f"{CONCORDIA_AUTH_URL}{soup.form['action']}"
   res4 = session.post(url4, data=data, headers=HEADERS, allow_redirects=True)
-  print(res4.text)
-  print(json.dumps(session.cookies.get_dict(), indent=2))
+  # print(res4.text)
+  # print(json.dumps(session.cookies.get_dict(), indent=2))
   
   soup = BeautifulSoup(res4.text, features="html.parser")
   url5 = soup.form['action']
   data = {input['name']: input['value'] for input in soup.find_all('input', {'type': 'hidden'})} # theres a visible submit button that messes with the data so filter it out
   res5 = session.post(url5, data=data, headers=HEADERS, allow_redirects=True)
+  #print(codecs.decode(codecs.encode(res5.text, encoding='utf-8', errors='ignore'), encoding='utf-8', errors='ignore'))
   print(res5.text)
   print(json.dumps(session.cookies.get_dict(), indent=2))
+  
+  url6 = f"{CONCORDIA_LIBCAL_URL}/ajax/equipment/checkout"
+  data = {
+    #'formData':{'fname': 'Koosha Gholipour Baradari', 'email': 'koosha.gholipourbaradari@mail.concordia.ca'},
+    'forcedEmail': '',
+    'returnUrl': "/r/accessible?lid=2161&gid=5032&zone=0&space=0&capacity=2&accessible=0&powered=0",
+    'logoutUrl': "logout",
+    'session': 0
+  }
+  res6 = session.post(url6, data=data, headers=HEADERS, allow_redirects=True)
+  print(res6)
+  print(res6.text)
   
   
       
