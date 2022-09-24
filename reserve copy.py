@@ -40,131 +40,67 @@ RESERVATION_TIMES = [
 ROOMS = [ # first index is highest priority, as it goes down the list, the less favorable the spot is
   [
     {
-      'eid': 18520,
+      'eid': 18537,
       'tech': True,
-      'name': 'LB 257 - Croatia',
+      'name': 'VL 301-10',
       'priority': 1
     },
-  ],
-  [
     {
-      'eid': 18518,
-      'tech': False,
-      'name': 'LB 251 - Luxembourg',
-      'priority': 2
-    },
-    {
-      'eid': 18522,
-      'tech': False,
-      'name': 'LB 259 - New Zealand',
-      'priority': 2
-    },
-  ],
-  [
-    {
-      'eid': 18508,
+      'eid': 18538,
       'tech': True,
-      'name': 'LB 351 - Netherlands',
-      'priority': 3
+      'name': 'VL 301-11',
+      'priority': 1
     },
     {
-      'eid': 18535,
+      'eid': 18539,
       'tech': True,
-      'name': 'LB 353 - Kenya',
-      'priority': 3
+      'name': 'VL 301-12',
+      'priority': 1
     },
     {
-      'eid': 18536,
+      'eid': 18540,
       'tech': True,
-      'name': 'LB 359 - Vietnam',
-      'priority': 3
-    },
-  ],
-  # [ # some presentation rooms don't have tables, so we wont look at those
-  #   {
-  #     'eid': 18529,
-  #     'tech': True,
-  #     'name': 'LB 311 - Haiti',
-  #     'priority': 4
-  #   },
-  #   {
-  #     'eid': 18530,
-  #     'tech': True,
-  #     'name': 'LB 316 - Australia',
-  #     'priority': 4
-  #   },
-  #   {
-  #     'eid': 18532,
-  #     'tech': True,
-  #     'name': 'LB 327 - Syria',
-  #     'priority': 4
-  #   },
-  #   {
-  #     'eid': 18533,
-  #     'tech': True,
-  #     'name': 'LB 328 - Zimbabwae',
-  #     'priority': 4
-  #   },
-  # ],
-  [
-    {
-      'eid': 18510,
-      'tech': True,
-      'name': 'LB 451 - Brazil',
-      'priority': 4
+      'name': 'VL 301-13',
+      'priority': 1
     },
     {
-      'eid': 18512,
+      'eid': 18541,
       'tech': True,
-      'name': 'LB 453 - Japan',
-      'priority': 4
+      'name': 'VL 301-20',
+      'priority': 1
     },
     {
-      'eid': 18523,
+      'eid': 18543,
       'tech': True,
-      'name': 'LB 459 - Italy',
-      'priority': 4
-    },
-  ],
-  [
-    {
-      'eid': 18524,
-      'tech': True,
-      'name': 'LB 518 - Ukraine',
-      'priority': 5
+      'name': 'VL 301-22',
+      'priority': 1
     },
     {
-      'eid': 18525,
+      'eid': 18544,
       'tech': True,
-      'name': 'LB 520 - South Africa',
-      'priority': 5
+      'name': 'VL 301-23',
+      'priority': 1
     },
     {
-      'eid': 18526,
+      'eid': 18545,
       'tech': True,
-      'name': 'LB 522 - Peru',
-      'priority': 5
+      'name': 'VL 301-24',
+      'priority': 1
     },
     {
-      'eid': 18511,
+      'eid': 18546,
       'tech': True,
-      'name': 'LB 547 - Lithuania',
-      'priority': 5
-    },
-    {
-      'eid': 18528,
-      'tech': True,
-      'name': 'LB 583 - Poland',
-      'priority': 5
+      'name': 'VL 301-25',
+      'priority': 1
     },
   ]
 ]
 
-LID = 2161 # library id
+LID = 2162 # library id
 
 HEADERS = {
   'User-Agent': 'Mozilla/5.0',
-  'Referer': 'https://concordiauniversity.libcal.com/reserve/webster',
+  'Referer': 'https://concordiauniversity.libcal.com/reserve/vanier',
 }
 
 CONCORDIA_LIBCAL_URL = 'https://concordiauniversity.libcal.com'
@@ -281,7 +217,7 @@ def createFormForRequest(slots: list):
 def daysSinceEpoch(date: datetime):
   return (date - datetime(1970, 1, 1)).days
 
-def dateFromReservation(reservation: list[dict]):
+def dateFromReservation(reservation):
   return datetime(*map(int, reservation[0]['start'].split(' ')[0].split('-')))
 
 def getAuth(session: requests.Session(), redirectRes: str):
@@ -350,8 +286,6 @@ def main():
   session = requests.Session()
   
   for reservationSlots in reservations:
-    
-    print(datetime.ctime(dateFromReservation(reservationSlots)))
         
     createCart = f'{CONCORDIA_LIBCAL_URL}/ajax/space/createcart'
     data = createFormForRequest(reservationSlots)
@@ -366,7 +300,7 @@ def main():
     confirmReservationUrl = f"{CONCORDIA_LIBCAL_URL}/ajax/equipment/checkout"
     data = {
       'forcedEmail': '',
-      'returnUrl': f"/r/accessible?lid={LID}&gid=5032&zone=0&space=0&capacity=2&accessible=0&powered=0",
+      'returnUrl': "/r/accessible?lid=2161&gid=5032&zone=0&space=0&capacity=2&accessible=0&powered=0",
       'logoutUrl': "logout",
       'session': 0
     }
@@ -377,11 +311,12 @@ def main():
     if confirmationRes.status_code == 500 and bool(LIBCAL_FAILED_RESERVATION_REGEX.findall(confirmationRes.text)):
       print(confirmationRes.text)
       print("Oops, it seems like we reserved this date already... Adding to database")
+      sleep(100)
     else:
-      # succesfully reserved, sleep a bit to make sure we get email confirmations
-      sleep(240)
+      sleep(300)
       
     database.addDay(daysSinceEpoch(dateFromReservation(reservationSlots)), conn)
+    
     
   
   database.destroyDBConnection(conn)
