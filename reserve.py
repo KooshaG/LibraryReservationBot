@@ -1,10 +1,17 @@
 from datetime import datetime, timedelta, time
 from bs4 import BeautifulSoup
+from time import sleep
 import requests
-import json
+import re
+import os
 
-CONCORDIA_USERNAME = ""
-CONCORDIA_PASSWORD = ""
+import database
+
+CONCORDIA_USERNAME = os.environ['CONCORDIA_USERNAME']
+CONCORDIA_PASSWORD = os.environ['CONCORDIA_PASSWORD']
+
+LIBCAL_AUTH_REGEX_CHECK = re.compile(r'<h2>Redirecting \.\.\.</h2>')
+LIBCAL_FAILED_RESERVATION_REGEX = re.compile(r'Sorry')
 
 RESERVATION_TIMES = [
   {
@@ -254,6 +261,9 @@ def isRoomAvailableInTime(roomArray: list[dict], reservationTime = RESERVATION_T
     return False
 
 def createFormForRequest(slots: list):
+  '''
+  Converts the reservation 
+  '''
   # create the stuff that doesn't change in the form and then add the extra stuff
   form = {
     "libAuth": "true",
@@ -268,28 +278,56 @@ def createFormForRequest(slots: list):
   
   return form
 
+def daysSinceEpoch(date: datetime):
+  return (date - datetime(1970, 1, 1)).days
 
+def dateFromReservation(reservation):
+  return datetime(*map(int, reservation[0]['start'].split(' ')[0].split('-')))
+
+def getAuth(session: requests.Session(), redirectRes: str):
   
-
+  soup = BeautifulSoup(redirectRes, features="html.parser")
+  params = {input['name']: input['value'] for input in soup.find_all('input')}
+  libcalCookieAdderUrl = soup.form['action']
+  libcalCookieAdderRes = session.get(libcalCookieAdderUrl, params=params, headers=HEADERS, allow_redirects=True)
+  
+  soup = BeautifulSoup(libcalCookieAdderRes.text, features="html.parser")
+  data = {
+    'UserName': CONCORDIA_USERNAME,
+    'Password': CONCORDIA_PASSWORD,
+    'AuthMethod': 'FormsAuthentication'
+    }
+  microsoftAuthUrl = f"{CONCORDIA_AUTH_URL}{soup.form['action']}"
+  microsoftAuthRes = session.post(microsoftAuthUrl, data=data, headers=HEADERS, allow_redirects=True)
+  
+  soup = BeautifulSoup(microsoftAuthRes.text, features="html.parser")
+  concordiaAuthLinkUrl = soup.form['action']
+  data = {input['name']: input['value'] for input in soup.find_all('input', {'type': 'hidden'})} # theres a visible submit button that messes with the data so filter it out
+  session.post(concordiaAuthLinkUrl, data=data, headers=HEADERS, allow_redirects=True)
+  # we are done authenticating now
+  
 def main(): 
   reservations = []
   for day in RESERVATION_TIMES:
     print(f"Looking to reserve a room for the following {day['dow']}s")
     reservationDates = reservationDaysInTwoWeeksFromNow(day)
+    
     for date in reservationDates:
       print(datetime.ctime(date))
       start = createDateStringsForRequest(date)
-      res = getAvailabilityArray(start)
+      createCartRes = getAvailabilityArray(start)
       reservationMade = False
       if reservationMade:
         break
-      for priority in ROOMS:
+      
+      for priority in ROOMS: # priority is kinda redundant but wtv
         if reservationMade: 
           break
         print(f"Priority: {priority[0]['priority']}")
+        
         for room in priority:
           print(f"\tRoom: {room['name']}")
-          roomTimes = getRoomAvailabilityArray(res, room)
+          roomTimes = getRoomAvailabilityArray(createCartRes, room)
           slots = isRoomAvailableInTime(roomTimes, day, room)
           if slots != False:
             print(f"## We have a room!! {room['name']} is available between {day['startTime']} and {day['endTime']} on {datetime.ctime(date)}")
@@ -298,60 +336,51 @@ def main():
             break
       if not reservationMade:
         print(f"No possible slots found for {datetime.ctime(date)}")
-  
+
+  conn = database.createDBConnection()
+    
+  # filter out the reservations that are in the database
+  reservations = list(filter(lambda reservation: database.findDay(daysSinceEpoch(dateFromReservation(reservation)), conn) == 0, reservations)) 
+
+  if len(reservations) == 0:
+    print('Theres nothing to reserve! Quiting...')
+    return
+
+  # make session for all the reservation requests  
   session = requests.Session()
   
-  url = f'{CONCORDIA_LIBCAL_URL}/ajax/space/createcart'
-  data = createFormForRequest(reservations[0])
-  res = session.post(url, data=data, headers=HEADERS, allow_redirects=True) #
-  # print(res.json())
-  # print(json.dumps(session.cookies.get_dict(), indent=2))
-  
-  url2 = f"{CONCORDIA_LIBCAL_URL}{res.json()['redirect']}"
-  res2 = session.get(url2, headers=HEADERS, allow_redirects=True)
-  # print(res2.text)
-  # print(json.dumps(session.cookies.get_dict(), indent=2))
-  
-  soup = BeautifulSoup(res2.text, features="html.parser")
-  params = {input['name']: input['value'] for input in soup.find_all('input')}
-  url3 = soup.form['action']
-  res3 = session.get(url3, params=params, headers=HEADERS, allow_redirects=True)
-  # print(res3.text)
-  # print(json.dumps(session.cookies.get_dict(), indent=2))
-  
-  soup = BeautifulSoup(res3.text, features="html.parser")
-  data = {
-    'UserName': CONCORDIA_USERNAME,
-    'Password': CONCORDIA_PASSWORD,
-    'AuthMethod': 'FormsAuthentication'
+  for reservationSlots in reservations:
+        
+    createCart = f'{CONCORDIA_LIBCAL_URL}/ajax/space/createcart'
+    data = createFormForRequest(reservationSlots)
+    createCartRes = session.post(createCart, data=data, headers=HEADERS, allow_redirects=True)
+    
+    authCheckUrl = f"{CONCORDIA_LIBCAL_URL}{createCartRes.json()['redirect']}"
+    authCheckRes = session.get(authCheckUrl, headers=HEADERS, allow_redirects=True)
+    
+    if bool(LIBCAL_AUTH_REGEX_CHECK.findall(authCheckRes.text)): # we got redirected to the auth check
+      getAuth(session=session, redirectRes=authCheckRes.text)
+    
+    confirmReservationUrl = f"{CONCORDIA_LIBCAL_URL}/ajax/equipment/checkout"
+    data = {
+      'forcedEmail': '',
+      'returnUrl': "/r/accessible?lid=2161&gid=5032&zone=0&space=0&capacity=2&accessible=0&powered=0",
+      'logoutUrl': "logout",
+      'session': 0
     }
-  url4 = f"{CONCORDIA_AUTH_URL}{soup.form['action']}"
-  res4 = session.post(url4, data=data, headers=HEADERS, allow_redirects=True)
-  # print(res4.text)
-  # print(json.dumps(session.cookies.get_dict(), indent=2))
+    confirmationRes = session.post(confirmReservationUrl, data=data, headers=HEADERS, allow_redirects=True)
+    
+    print(confirmationRes)
+    
+    if confirmationRes.status_code == 500 and bool(LIBCAL_FAILED_RESERVATION_REGEX.findall(confirmationRes.text)):
+      print(confirmationRes.text)
+      print("Oops, it seems like we reserved this date already... Adding to database")
+    
+    database.addDay(daysSinceEpoch(dateFromReservation(reservationSlots)), conn)
+    
+    sleep(30)
   
-  soup = BeautifulSoup(res4.text, features="html.parser")
-  url5 = soup.form['action']
-  data = {input['name']: input['value'] for input in soup.find_all('input', {'type': 'hidden'})} # theres a visible submit button that messes with the data so filter it out
-  res5 = session.post(url5, data=data, headers=HEADERS, allow_redirects=True)
-  #print(codecs.decode(codecs.encode(res5.text, encoding='utf-8', errors='ignore'), encoding='utf-8', errors='ignore'))
-  print(res5.text)
-  print(json.dumps(session.cookies.get_dict(), indent=2))
-  
-  url6 = f"{CONCORDIA_LIBCAL_URL}/ajax/equipment/checkout"
-  data = {
-    #'formData':{'fname': 'Koosha Gholipour Baradari', 'email': 'koosha.gholipourbaradari@mail.concordia.ca'},
-    'forcedEmail': '',
-    'returnUrl': "/r/accessible?lid=2161&gid=5032&zone=0&space=0&capacity=2&accessible=0&powered=0",
-    'logoutUrl': "logout",
-    'session': 0
-  }
-  res6 = session.post(url6, data=data, headers=HEADERS, allow_redirects=True)
-  print(res6)
-  print(res6.text)
-  
-  
+  database.destroyDBConnection(conn)
       
-  
 if __name__ == "__main__":
   main()
