@@ -4,8 +4,9 @@ from time import sleep
 import requests
 import re
 import os
+import logging
 
-import database
+from Reserve import database
 
 CONCORDIA_USERNAME = os.environ['CONCORDIA_USERNAME']
 CONCORDIA_PASSWORD = os.environ['CONCORDIA_PASSWORD']
@@ -252,7 +253,7 @@ def isRoomAvailableInTime(roomArray: list[dict], reservationTime = RESERVATION_T
     if roomStartTime >= startTime and roomStartTime <= endTime: # append all the slots within the time to an array to make creating the reservations easier
       consecutiveSlots -= 1
       slotsInTime.append(slot)
-      print(f"\t\t{startTime} > {roomStartTime} > {endTime}")
+      logging.debug(f"\t\t{startTime} > {roomStartTime} > {endTime}")
     else: # reset the counter if we miss a slot, so we definitely dont send a partial reservation
       consecutiveSlots = reservationTime['30minSlots']
   if consecutiveSlots == 0: 
@@ -309,11 +310,11 @@ def getAuth(session: requests.Session(), redirectRes: str):
 def main(): 
   reservations = []
   for day in RESERVATION_TIMES:
-    print(f"Looking to reserve a room for the following {day['dow']}s")
+    logging.info(f"Looking to reserve a room for the following {day['dow']}s")
     reservationDates = reservationDaysInTwoWeeksFromNow(day)
     
     for date in reservationDates:
-      print(datetime.ctime(date))
+      logging.info(datetime.ctime(date))
       start = createDateStringsForRequest(date)
       createCartRes = getAvailabilityArray(start)
       reservationMade = False
@@ -323,19 +324,19 @@ def main():
       for priority in ROOMS: # priority is kinda redundant but wtv
         if reservationMade: 
           break
-        print(f"Priority: {priority[0]['priority']}")
+        logging.info(f"Priority: {priority[0]['priority']}")
         
         for room in priority:
-          print(f"\tRoom: {room['name']}")
+          logging.info(f"\tRoom: {room['name']}")
           roomTimes = getRoomAvailabilityArray(createCartRes, room)
           slots = isRoomAvailableInTime(roomTimes, day, room)
           if slots != False:
-            print(f"## We have a room!! {room['name']} is available between {day['startTime']} and {day['endTime']} on {datetime.ctime(date)}")
+            logging.info(f"## We have a room!! {room['name']} is available between {day['startTime']} and {day['endTime']} on {datetime.ctime(date)}")
             reservations.append(slots)
             reservationMade = True
             break
       if not reservationMade:
-        print(f"No possible slots found for {datetime.ctime(date)}")
+        logging.info(f"No possible slots found for {datetime.ctime(date)}")
 
   conn = database.createDBConnection()
     
@@ -343,7 +344,7 @@ def main():
   reservations = list(filter(lambda reservation: database.findDay(daysSinceEpoch(dateFromReservation(reservation)), conn) == 0, reservations)) 
 
   if len(reservations) == 0:
-    print('Theres nothing to reserve! Quiting...')
+    logging.info('Theres nothing to reserve! Quiting...')
     return
 
   # make session for all the reservation requests  
@@ -351,7 +352,7 @@ def main():
   
   for reservationSlots in reservations:
     
-    print(datetime.ctime(dateFromReservation(reservationSlots)))
+    logging.info(datetime.ctime(dateFromReservation(reservationSlots)))
         
     createCart = f'{CONCORDIA_LIBCAL_URL}/ajax/space/createcart'
     data = createFormForRequest(reservationSlots)
@@ -372,11 +373,11 @@ def main():
     }
     confirmationRes = session.post(confirmReservationUrl, data=data, headers=HEADERS, allow_redirects=True)
     
-    print(confirmationRes)
+    logging.debug(confirmationRes)
     
     if confirmationRes.status_code == 500 and bool(LIBCAL_FAILED_RESERVATION_REGEX.findall(confirmationRes.text)):
-      print(confirmationRes.text)
-      print("Oops, it seems like we reserved this date already... Adding to database")
+      logging.debug(confirmationRes.text)
+      logging.info("Oops, it seems like we reserved this date already... Adding to database")
     else:
       # succesfully reserved, sleep a bit to make sure we get email confirmations
       sleep(240)

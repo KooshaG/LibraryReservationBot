@@ -5,4 +5,4 @@
 azure-functions
 BeautifulSoup4
 requests
-psycopg2
+psycopg2-binary
