@@ -8,7 +8,7 @@ It's currently a work in progress as there's still some stuff that needs to be d
 
 ## Things that need to be worked on
 - [ ] Work on database
--   [ ] Store multiple users in database to allow one script to reserve for more than 1 person
+  - [ ] Store multiple users in database to allow one script to reserve for more than 1 person
     - User login info (Find a way to secure info)
     - Dates that the user already reserved
     - Reservation days of the week for the user
