@@ -1,12 +1,16 @@
-from datetime import datetime, timedelta, time
-from bs4 import BeautifulSoup
-from time import sleep
-import requests
-import re
-import os
 import logging
+import os
+import re
+from datetime import datetime, time, timedelta
+from time import sleep
+
+import requests
+from bs4 import BeautifulSoup
 
 from Reserve import database
+# import database
+
+from Types import Room, RoomAvailability, ReservationRequest
 
 CONCORDIA_USERNAME = os.environ['CONCORDIA_USERNAME']
 CONCORDIA_PASSWORD = os.environ['CONCORDIA_PASSWORD']
@@ -14,152 +18,7 @@ CONCORDIA_PASSWORD = os.environ['CONCORDIA_PASSWORD']
 LIBCAL_AUTH_REGEX_CHECK = re.compile(r'<h2>Redirecting \.\.\.</h2>')
 LIBCAL_FAILED_RESERVATION_REGEX = re.compile(r'Sorry')
 
-RESERVATION_TIMES = [
-  {
-    'dow': 'Monday',
-    'iso_weekday': 1,
-    'startTime': '13:00:00',
-    'endTime': '16:00:00',
-    '30minSlots': 6
-  },
-  {
-    'dow': 'Friday',
-    'iso_weekday': 5,
-    'startTime': '14:30:00',
-    'endTime': '16:00:00',
-    '30minSlots': 4
-  },
-  {
-    'dow': 'Thursday',
-    'iso_weekday': 4,
-    'startTime': '15:00:00',
-    'endTime': '16:00:00',
-    '30minSlots': 2
-  }
-]
-
-ROOMS = [ # first index is highest priority, as it goes down the list, the less favorable the spot is
-  [
-    {
-      'eid': 18520,
-      'tech': True,
-      'name': 'LB 257 - Croatia',
-      'priority': 1
-    },
-  ],
-  [
-    {
-      'eid': 18518,
-      'tech': False,
-      'name': 'LB 251 - Luxembourg',
-      'priority': 2
-    },
-    {
-      'eid': 18522,
-      'tech': False,
-      'name': 'LB 259 - New Zealand',
-      'priority': 2
-    },
-  ],
-  [
-    {
-      'eid': 18508,
-      'tech': True,
-      'name': 'LB 351 - Netherlands',
-      'priority': 3
-    },
-    {
-      'eid': 18535,
-      'tech': True,
-      'name': 'LB 353 - Kenya',
-      'priority': 3
-    },
-    {
-      'eid': 18536,
-      'tech': True,
-      'name': 'LB 359 - Vietnam',
-      'priority': 3
-    },
-  ],
-  # [ # some presentation rooms don't have tables, so we wont look at those
-  #   {
-  #     'eid': 18529,
-  #     'tech': True,
-  #     'name': 'LB 311 - Haiti',
-  #     'priority': 4
-  #   },
-  #   {
-  #     'eid': 18530,
-  #     'tech': True,
-  #     'name': 'LB 316 - Australia',
-  #     'priority': 4
-  #   },
-  #   {
-  #     'eid': 18532,
-  #     'tech': True,
-  #     'name': 'LB 327 - Syria',
-  #     'priority': 4
-  #   },
-  #   {
-  #     'eid': 18533,
-  #     'tech': True,
-  #     'name': 'LB 328 - Zimbabwae',
-  #     'priority': 4
-  #   },
-  # ],
-  [
-    {
-      'eid': 18510,
-      'tech': True,
-      'name': 'LB 451 - Brazil',
-      'priority': 4
-    },
-    {
-      'eid': 18512,
-      'tech': True,
-      'name': 'LB 453 - Japan',
-      'priority': 4
-    },
-    {
-      'eid': 18523,
-      'tech': True,
-      'name': 'LB 459 - Italy',
-      'priority': 4
-    },
-  ],
-  [
-    {
-      'eid': 18524,
-      'tech': True,
-      'name': 'LB 518 - Ukraine',
-      'priority': 5
-    },
-    {
-      'eid': 18525,
-      'tech': True,
-      'name': 'LB 520 - South Africa',
-      'priority': 5
-    },
-    {
-      'eid': 18526,
-      'tech': True,
-      'name': 'LB 522 - Peru',
-      'priority': 5
-    },
-    {
-      'eid': 18511,
-      'tech': True,
-      'name': 'LB 547 - Lithuania',
-      'priority': 5
-    },
-    {
-      'eid': 18528,
-      'tech': True,
-      'name': 'LB 583 - Poland',
-      'priority': 5
-    },
-  ]
-]
+RESERVATION_TIMES = ReservationRequest.KOOSHA_RESERVATION_TIMES
 
 LID = 2161 # library id
 
@@ -179,8 +38,8 @@ def reservationDaysInTwoWeeksFromNow(day = RESERVATION_TIMES[0]):
   '''
   # We want to get all the days that are in our reservation days and is also less than 2 weeks from now
   now = datetime.now()
-  dates = []
-  diff = day['iso_weekday'] - now.isoweekday() # Find difference between today and the day we are trying to reserve (Number from -6 to 6)
+  dates: list[datetime] = []
+  diff = day.iso_weekday - now.isoweekday() # Find difference between today and the day we are trying to reserve (Number from -6 to 6)
   if diff == 0: # A day we want to reserve is also today, so add this to array
     dates.append(now) 
     dates.append(now + timedelta(days=7))
@@ -205,32 +64,16 @@ def createDateStringsForRequest(date: datetime):
   # endDate = nextDay.strftime("%Y-%m-%d")
   return startDate #, endDate
 
-def getAvailabilityArray(startStr: str):
-  '''
-  Queries the availablilty grid in libcal with the time string created in createDateStringsForRequest and returns a list of all the availablilities for that day
-  '''
-  url = f"https://concordiauniversity.libcal.com/r/accessible/availability?lid={LID}&date={startStr}"
-  soup = BeautifulSoup(requests.get(url).text, features="html.parser")                       # use the information contained in the html, the checkboxes on the accessibility website 
-  divs = soup.find_all('div', {'class': 'panel panel-default'}) # have hidden properties that we can take advantage of
-  inputs = [div.find_all('input') for div in divs] # using array generator notation to compile all the input tags that contain the availability information
-  inputs = [inputTag for sublist in inputs for inputTag in sublist] #flatten array
-  return [
-    {
-      "start": input['data-start'],
-      "end": input['data-end'],
-      "seat_id": input['data-seat'],
-      "lid": LID,
-      "eid": int(input['data-eid']),
-      "checksum": input['data-crc']
-    } for input in inputs]
+
  
-def getRoomAvailabilityArray(availabilityArray: dict, room = ROOMS[0][0]):
+def getRoomAvailabilityArray(availabilityArray: list[RoomAvailability.RoomAvailability], room = Room.LIB_ALL[0]):
   '''
   Filters out the array to only contain the specified room information
   '''
-  return list(filter(lambda array: int(array['eid']) == room['eid'], availabilityArray))
+  # array is of type RoomAvailability and itterates on availabilityArray
+  return list(filter(lambda array: int(array.eid) == room.eid, availabilityArray))
 
-def isRoomAvailableInTime(roomArray: list[dict], reservationTime = RESERVATION_TIMES[0], room = ROOMS[0][0]):
+def isRoomAvailableInTime(roomArray: list[RoomAvailability.RoomAvailability], reservationTime = RESERVATION_TIMES[0], room = Room.LIB_ALL[0]):
   '''
   Checks if the room is available between the times specified in the reservation time
   If it is available, returns an array of the room slot dictionaries that was given by room aray but only the ones that are between the times
@@ -238,14 +81,14 @@ def isRoomAvailableInTime(roomArray: list[dict], reservationTime = RESERVATION_T
   '''
   # turn time strings into time objects
   # the *map thing is pretty weird, it can process times much faster than datetime can on its own. idk why lol
-  startTime = time(*map(int, reservationTime['startTime'].split(':')))
-  endTime = time(*map(int, reservationTime['endTime'].split(':')))
-  slotsInTime = []
-  consecutiveSlots = reservationTime['30minSlots']
+  startTime = time(*map(int, reservationTime.startTime.split(':')))
+  endTime = time(*map(int, reservationTime.endTime.split(':')))
+  slotsInTime: list[RoomAvailability.RoomAvailability] = []
+  consecutiveSlots = reservationTime.slots30mins
   
   for slot in roomArray:
     # room times are formatted like 'YYYY-MM-DD hh:mm:ss', take second half and do the same thing as above
-    roomStartTime = time(*map(int, slot['start'].split(' ')[1].split(':')))
+    roomStartTime = time(*map(int, slot.start.split(' ')[1].split(':')))
     
     if consecutiveSlots == 0: # we have a room that is available for every time slot that we wanted
       break
@@ -255,7 +98,7 @@ def isRoomAvailableInTime(roomArray: list[dict], reservationTime = RESERVATION_T
       slotsInTime.append(slot)
       logging.debug(f"\t\t{startTime} > {roomStartTime} > {endTime}")
     else: # reset the counter if we miss a slot, so we definitely dont send a partial reservation
-      consecutiveSlots = reservationTime['30minSlots']
+      consecutiveSlots = reservationTime.slots30mins
   if consecutiveSlots == 0: 
     return slotsInTime
   else:
@@ -274,8 +117,8 @@ def createFormForRequest(slots: list):
   }
   # transform the information in the slots to the gross data layout that libcal wants
   for index, slot in enumerate(slots):
-      for key in slot:
-        form[f'bookings[{index}][{key}]'] = slot[key]
+      for key in slot.__dict__:
+        form[f'bookings[{index}][{key}]'] = slot.__dict__[key]
   
   return form
 
@@ -308,33 +151,27 @@ def getAuth(session: requests.Session(), redirectRes: str):
   # we are done authenticating now
   
 def main(): 
-  reservations = []
+  reservations: list[list[RoomAvailability.RoomAvailability]] = []
   for day in RESERVATION_TIMES:
-    logging.info(f"Looking to reserve a room for the following {day['dow']}s")
+    logging.info(f"Looking to reserve a room for the following {day.dow}s")
     reservationDates = reservationDaysInTwoWeeksFromNow(day)
     
     for date in reservationDates:
       logging.info(datetime.ctime(date))
       start = createDateStringsForRequest(date)
-      createCartRes = getAvailabilityArray(start)
+      createCartRes = RoomAvailability.getAvailabilityArray(start)
       reservationMade = False
       if reservationMade:
         break
-      
-      for priority in ROOMS: # priority is kinda redundant but wtv
-        if reservationMade: 
+      for room in Room.LIB_ALL:
+        logging.info(f"\tRoom: {room.name}")
+        roomTimes = getRoomAvailabilityArray(createCartRes, room)
+        slots = isRoomAvailableInTime(roomTimes, day, room)
+        if slots != False:
+          logging.info(f"## We have a room!! {room.name} is available between {day.startTime} and {day.endTime} on {datetime.ctime(date)}")
+          reservations.append(slots)
+          reservationMade = True
           break
-        logging.info(f"Priority: {priority[0]['priority']}")
-        
-        for room in priority:
-          logging.info(f"\tRoom: {room['name']}")
-          roomTimes = getRoomAvailabilityArray(createCartRes, room)
-          slots = isRoomAvailableInTime(roomTimes, day, room)
-          if slots != False:
-            logging.info(f"## We have a room!! {room['name']} is available between {day['startTime']} and {day['endTime']} on {datetime.ctime(date)}")
-            reservations.append(slots)
-            reservationMade = True
-            break
       if not reservationMade:
         logging.info(f"No possible slots found for {datetime.ctime(date)}")
 
@@ -385,6 +222,40 @@ def main():
     
   
   database.destroyDBConnection(conn)
+  
+  
+def test():
+  '''
+  Do a local run of things, Does not access the database or make any reservations. Outputs all info to stdout.
+  '''
+  reservations: list[list[RoomAvailability.RoomAvailability]] = []
+  for day in RESERVATION_TIMES:
+    print(f"Looking to reserve a room for the following {day.dow}s")
+    reservationDates = reservationDaysInTwoWeeksFromNow(day)
+    print(reservationDates)
+    for date in reservationDates:
+      print(datetime.ctime(date))
+      start = createDateStringsForRequest(date)
+      createCartRes = RoomAvailability.getAvailabilityArray(start)
+      reservationMade = False
+      if reservationMade:
+        break
+      for room in Room.LIB_ALL:
+        print(f"\tRoom: {room.name}")
+        roomTimes = getRoomAvailabilityArray(createCartRes, room)
+        slots = isRoomAvailableInTime(roomTimes, day, room)
+        if slots != False:
+          print(f"## We have a room!! {room.name} is available between {day.startTime} and {day.endTime} on {datetime.ctime(date)}")
+          reservations.append(slots)
+          reservationMade = True
+          break
+      if not reservationMade:
+        print(f"No possible slots found for {datetime.ctime(date)}")
+  for reservation in reservations:
+    print(f"{reservation}\n")
+    print(createFormForRequest(reservation))
+    
       
 if __name__ == "__main__":
-  main()
+  # main()
+  test()
