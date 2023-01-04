@@ -125,8 +125,8 @@ def createFormForRequest(slots: list):
 def daysSinceEpoch(date: datetime):
   return (date - datetime(1970, 1, 1)).days
 
-def dateFromReservation(reservation: list[dict]):
-  return datetime(*map(int, reservation[0]['start'].split(' ')[0].split('-')))
+def dateFromReservation(reservation: list[RoomAvailability.RoomAvailability]):
+  return datetime(*map(int, reservation[0].start.split(' ')[0].split('-')))
 
 def getAuth(session: requests.Session(), redirectRes: str):
   
@@ -254,6 +254,7 @@ def test():
   for reservation in reservations:
     print(f"{reservation}\n")
     print(createFormForRequest(reservation))
+    print(dateFromReservation(reservation))
     
       
 if __name__ == "__main__":
