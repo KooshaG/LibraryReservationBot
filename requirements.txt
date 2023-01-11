@@ -8,3 +8,5 @@ requests
 psycopg2-binary
 
 Flask
+sqlalchemy
+flask-sqlalchemy

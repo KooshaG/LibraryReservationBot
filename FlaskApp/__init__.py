@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, render_template
 
 
 app = Flask(__name__)
@@ -13,6 +13,10 @@ def index():
 @app.route("/hello/<name>", methods=['GET'])
 def hello(name: str):
     return f"hello {name}"
+
+@app.route("/balls/<name>", methods=['GET'])
+def balls(name: str):
+    return render_template('farts.html', balls=name if name else "hoopla")
 
 @app.route("/module")
 def module():

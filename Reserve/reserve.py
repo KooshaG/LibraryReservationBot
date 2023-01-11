@@ -104,7 +104,7 @@ def isRoomAvailableInTime(roomArray: list[RoomAvailability.RoomAvailability], re
   else:
     return False
 
-def createFormForRequest(slots: list):
+def createFormForRequest(slots: list[RoomAvailability.RoomAvailability]):
   '''
   Converts the reservation 
   '''
