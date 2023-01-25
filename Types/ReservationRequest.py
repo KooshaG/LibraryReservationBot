@@ -12,5 +12,5 @@ class ReservationRequest:
     
 KOOSHA_RESERVATION_TIMES = [
   ReservationRequest('Monday', 1, '10:30:00', '13:30:00', 6),
-  ReservationRequest('Wednesday', 3, '12:30:00', '15:00:00', 5)
+  ReservationRequest('Wednesday', 3, '13:00:00', '15:00:00', 4)
 ]
