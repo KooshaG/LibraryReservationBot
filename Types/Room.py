@@ -13,8 +13,8 @@ class Room:
     return f"Room('{self.name}', {self.eid}, {self.tech}, {self.priority})"
     
 LIB_FLOOR_2 = [
-  Room('LB 257 - Croatia', 18520, True, 1),
-  Room('LB 251 - Luxembourg', 18518, False, 2),
+  Room('LB 251 - Luxembourg', 18518, False, 1),
+  Room('LB 257 - Croatia', 18520, True, 2),
   Room('LB 259 - New Zealand', 18522, False, 2),
 ]
 
