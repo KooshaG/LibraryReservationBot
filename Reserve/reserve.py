@@ -213,7 +213,7 @@ def main():
     logging.debug(confirmationRes)
     
     if confirmationRes.status_code == 500 and bool(LIBCAL_FAILED_RESERVATION_REGEX.findall(confirmationRes.text)):
-      logging.debug(confirmationRes.text)
+      logging.info(confirmationRes.text)
       logging.info("Oops, it seems like we reserved this date already... Adding to database")
     elif reservationSlots != reservations[-1]: # this is not the last reservation, we should sleep to give the email service time to send before making the next reservation
       sleep(240)
