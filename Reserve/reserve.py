@@ -128,7 +128,7 @@ def daysSinceEpoch(date: datetime):
 def dateFromReservation(reservation: list[RoomAvailability.RoomAvailability]):
   return datetime(*map(int, reservation[0].start.split(' ')[0].split('-')))
 
-def getAuth(session: requests.Session(), redirectRes: str):
+def getAuth(session: requests.Session, redirectRes: str):
   
   soup = BeautifulSoup(redirectRes, features="html.parser")
   params = {input['name']: input['value'] for input in soup.find_all('input')}
@@ -147,7 +147,8 @@ def getAuth(session: requests.Session(), redirectRes: str):
   soup = BeautifulSoup(microsoftAuthRes.text, features="html.parser")
   concordiaAuthLinkUrl = soup.form['action']
   data = {input['name']: input['value'] for input in soup.find_all('input', {'type': 'hidden'})} # theres a visible submit button that messes with the data so filter it out
-  session.post(concordiaAuthLinkUrl, data=data, headers=HEADERS, allow_redirects=True)
+  res = session.post(concordiaAuthLinkUrl, data=data, headers=HEADERS, allow_redirects=True)
+  logging.info(res.text)
   # we are done authenticating now
   
 def main(): 
