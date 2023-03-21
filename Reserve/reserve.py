@@ -164,7 +164,7 @@ def main():
       reservationMade = False
       if reservationMade:
         break
-      for room in Room.LIB_ALL:
+      for room in Room.LIB_FLOOR_3:
         logging.info(f"\tRoom: {room.name}")
         roomTimes = getRoomAvailabilityArray(createCartRes, room)
         slots = isRoomAvailableInTime(roomTimes, day, room)
