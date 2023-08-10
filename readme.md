@@ -1,3 +1,5 @@
+# ⚠️ This project was abandoned and instead Room Master was made. [Check out the repo here](https://github.com/KooshaG/RoomMaster) ⚠️
+
 # Concordia Library Reservation Bot
 
 Hello!
